@@ -1,33 +1,45 @@
-# vinted_pricing.py  – JSON‑based price grabber
-import requests, statistics, urllib.parse
+# vinted_pricing.py
+"""
+Grabs the first ~48 active Vinted listings for a search term by
+parsing the JSON blob embedded in the catalog HTML.  Works even when
+the API endpoint blocks cloud hosts.
+"""
+import requests, re, json, statistics, urllib.parse
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
 
-def vinted_price_stats(query: str, max_items: int = 50):
-    """
-    Returns low / median / high price and count for the first `max_items`
-    active Vinted listings that match `query`.
-    """
-    q = urllib.parse.quote_plus(query)
+SCRIPT_RE = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
+
+def vinted_price_stats(search: str, max_items: int = 48):
     url = (
-        "https://www.vinted.co.uk/api/v2/catalog/items?"
-        f"search_text={q}&per_page={max_items}"
+        "https://www.vinted.co.uk/catalog?"
+        f"search_text={urllib.parse.quote_plus(search)}"
     )
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
-        resp.raise_for_status()
+        html = requests.get(url, headers=HEADERS, timeout=10).text
     except requests.RequestException:
         return {"low": 0, "median": 0, "high": 0, "count": 0}
 
-    items = resp.json().get("items", [])
-    prices = [float(it.get("price", 0)) for it in items if it.get("price")]
+    m = SCRIPT_RE.search(html)
+    if not m:
+        return {"low": 0, "median": 0, "high": 0, "count": 0}
+
+    try:
+        data = json.loads(m.group(1))
+        items = (
+            data["props"]["pageProps"]["items"]["catalogItems"]["items"][:max_items]
+        )
+    except (KeyError, json.JSONDecodeError):
+        return {"low": 0, "median": 0, "high": 0, "count": 0}
+
+    prices = [float(i["price"]) for i in items if i.get("price")]
 
     if not prices:
         return {"low": 0, "median": 0, "high": 0, "count": 0}
