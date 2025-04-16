@@ -1,29 +1,34 @@
 """
-vinted_pricing.py – fetches active‑listing prices even when Cloudflare
-blocks normal requests, by using a headless real browser.
+vinted_pricing.py  ·  Fetches listing prices with Cloudflare handled by
+'cloudscraper' (no browser needed, works on Streamlit Cloud).
 """
-import statistics, json, re, urllib.parse, time
-import undetected_chromedriver as uc
-from selenium.webdriver.common.by import By
+import cloudscraper, re, json, statistics, urllib.parse
 
-SCRIPT_RX = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
+# Regex to grab the big JSON blob from the HTML
+SCRIPT_RX = re.compile(
+    r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S
+)
 
-def _fetch_html(url: str) -> str:
-    opts = uc.ChromeOptions()
-    opts.add_argument("--headless=new")
-    driver = uc.Chrome(options=opts)
-    driver.get(url)
-    time.sleep(2)            # wait for Cloudflare JS & page render
-    html = driver.page_source
-    driver.quit()
-    return html
+# Single, reusable Cloudflare‑aware session
+scraper = cloudscraper.create_scraper(
+    browser={"browser": "chrome", "platform": "windows", "mobile": False}
+)
 
 def vinted_price_stats(search: str, max_items: int = 48):
+    """
+    Return low / median / high price + count of active Vinted listings
+    matching `search`.
+    """
     url = (
         "https://www.vinted.co.uk/catalog?"
         f"search_text={urllib.parse.quote_plus(search)}"
     )
-    html = _fetch_html(url)
+
+    try:
+        html = scraper.get(url, timeout=15).text
+    except Exception:
+        return {"low": 0, "median": 0, "high": 0, "count": 0}
+
     m = SCRIPT_RX.search(html)
     if not m:
         return {"low": 0, "median": 0, "high": 0, "count": 0}
@@ -34,7 +39,7 @@ def vinted_price_stats(search: str, max_items: int = 48):
     except (KeyError, json.JSONDecodeError):
         return {"low": 0, "median": 0, "high": 0, "count": 0}
 
-    prices = [float(it["price"]) for it in items if it.get("price")]
+    prices = [float(i["price"]) for i in items if i.get("price")]
     if not prices:
         return {"low": 0, "median": 0, "high": 0, "count": 0}
 
