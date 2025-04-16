@@ -18,8 +18,8 @@ def _stats(prices):
 
 def vinted_price_stats(search: str, count: int = 50):
     # 1) public JSON API
-    api = ("https://www.vinted.co.uk/api/v2/catalog/items?"
-           f"search_text={urllib.parse.quote_plus(search)}&per_page={count}")
+    api = ( "https://www.vinted.co.uk/api/v2/catalog/items?"
+            f"search_text={urllib.parse.quote_plus(search)}&per_page={count}" )
     r = scraper.get(api, timeout=15)
     if r.status_code == 200:
         prices = [float(i["price"]) for i in r.json().get("items", []) if i.get("price")]
@@ -27,8 +27,10 @@ def vinted_price_stats(search: str, count: int = 50):
             return _stats(prices)
 
     # 2) fallback: embedded JSON in catalog HTML
-    html = scraper.get(f"https://www.vinted.co.uk/catalog?search_text="
-                       f"{urllib.parse.quote_plus(search)}", timeout=15).text
+    html = scraper.get(
+        f"https://www.vinted.co.uk/catalog?search_text={urllib.parse.quote_plus(search)}",
+        timeout=15
+    ).text
     m = HTML_RX.search(html)
     if not m:
         return _stats([])
