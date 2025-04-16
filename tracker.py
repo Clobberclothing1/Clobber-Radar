@@ -1,26 +1,42 @@
+"""
+CSV‑based profit tracker with a bonus monthly_summary() helper.
+"""
+import pandas as pd, os, datetime as dt
 
-import pandas as pd, os, datetime
+FILE = "tracker.csv"
+COLUMNS = ["date", "item", "platform", "bought", "sold", "roi_percent"]
 
-CSV_FILE = "tracker.csv"
+def _load() -> pd.DataFrame:
+    if os.path.exists(FILE):
+        return pd.read_csv(FILE)
+    return pd.DataFrame(columns=COLUMNS)
 
-def log_sale(item,bought,sold,platform):
-    roi = (sold - bought) / bought if bought else 0
+def log_sale(item: str, bought: float, sold: float, platform: str):
+    roi = (sold - bought) / bought * 100 if bought else 0
     row = {
-        "date": datetime.date.today().isoformat(),
+        "date": dt.date.today().isoformat(),
         "item": item,
         "platform": platform,
         "bought": bought,
         "sold": sold,
-        "roi_percent": round(roi*100,1)
+        "roi_percent": round(roi, 1),
     }
-    if os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-        df = pd.concat([df,pd.DataFrame([row])], ignore_index=True)
-    else:
-        df = pd.DataFrame([row])
-    df.to_csv(CSV_FILE,index=False)
+    df = pd.concat([_load(), pd.DataFrame([row])], ignore_index=True)
+    df.to_csv(FILE, index=False)
 
-def get_log():
-    if os.path.exists(CSV_FILE):
-        return pd.read_csv(CSV_FILE)
-    return pd.DataFrame(columns=["date","item","platform","bought","sold","roi_percent"])
+def get_log() -> pd.DataFrame:
+    return _load()
+
+def monthly_summary() -> pd.DataFrame:
+    df = _load()
+    if df.empty:
+        return df
+    df["date"] = pd.to_datetime(df["date"])
+    summary = (
+        df.groupby(df["date"].dt.to_period("M"))
+          .agg(total_profit=("roi_percent", "sum"),
+               flips=("item", "count"))
+          .reset_index()
+          .rename(columns={"date": "month"})
+    )
+    return summary
