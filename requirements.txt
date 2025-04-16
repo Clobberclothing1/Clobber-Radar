@@ -3,6 +3,4 @@ pandas
 requests
 beautifulsoup4
 pillow
-selenium
-undetected-chromedriver==3.5.5
-setuptools
+cloudscraper
